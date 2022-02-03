@@ -8,6 +8,8 @@ namespace SignalRTestCore
 {
     class Program
     {
+        const string HubUrl = "http://localhost:8085/hub";
+
         static void Main(string[] args)
         {
             RunTaksAsync().GetAwaiter().GetResult();
@@ -15,11 +17,10 @@ namespace SignalRTestCore
 
         private static async Task RunTaksAsync()
         {
-            List<Task> TaskList = new List<Task>();
-            for (int userIndex = 0; userIndex < 50; userIndex++)
+            List<Task> TaskList = new();
+            for (int userIndex = 0; userIndex < 20; userIndex++)
             {
-                var LastTask = Main2Async(userIndex);
-
+                var LastTask = ConnectUserAsync(userIndex);
                 TaskList.Add(LastTask);
             }
             await Task.WhenAll(TaskList.ToArray());
@@ -28,17 +29,16 @@ namespace SignalRTestCore
             Console.ReadKey();
         }
 
-        private static async Task Main2Async(int userIndex)
+        private static async Task ConnectUserAsync(int userIndex)
         {
             HubConnection connection;
-
             connection = new HubConnectionBuilder()
-                .WithUrl("http://localhost:8085/signalr").Build();
+                .WithUrl(HubUrl).Build();
 
             #region snippet_ClosedRestart
             connection.Closed += async (error) =>
             {
-                await Task.Delay(new Random().Next(0, 5) * 1000);
+                //await Task.Delay(new Random().Next(0, 5) * 1000);
                 await connection.StartAsync();
             };
             #endregion
@@ -56,17 +56,18 @@ namespace SignalRTestCore
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"{ex.Message}: {ex.InnerException.Message}");
+                Console.WriteLine($"{ex.Message}: {ex.InnerException?.Message}");
             }
             if (connection.State != HubConnectionState.Connected)
             {
                 return;
             }
+            var methodName = "GetTestProducts";
             // Call "Cancel" on this CancellationTokenSource to send a cancellation message to
             // the server, which will trigger the corresponding token in the hub method.
             var cancellationTokenSource = new CancellationTokenSource();
-            var channel = await connection.StreamAsChannelAsync<object>(
-                "GetTestProducts", cancellationTokenSource.Token);
+            var channel = await connection.StreamAsChannelAsync<object>(methodName
+                , cancellationTokenSource.Token);
 
             // Wait asynchronously for data to become available
             while (await channel.WaitToReadAsync())
@@ -79,7 +80,7 @@ namespace SignalRTestCore
             }
             try
             {
-                await connection.SendAsync("GetTestProducts");
+                await connection.SendAsync(methodName);
             }
             catch (Exception ex)
             {
